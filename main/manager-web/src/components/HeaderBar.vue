@@ -3,60 +3,62 @@
     <div class="header-container">
       <!-- 左侧元素 -->
       <div class="header-left">
-        <img alt="" src="@/assets/xiaozhi-logo.png" class="logo-img"/>
-        <img alt="" src="@/assets/xiaozhi-ai.png" class="brand-img"/>
+        <img loading="lazy" alt="" src="@/assets/xiaozhi-logo.png" class="logo-img" />
+        <img loading="lazy" alt="" src="@/assets/xiaozhi-ai.png" class="brand-img" />
       </div>
 
       <!-- 中间导航菜单 -->
       <div class="header-center">
         <div class="equipment-management" :class="{ 'active-tab': $route.path === '/home' }" @click="goHome">
-          <img alt="" src="@/assets/header/roboot.png" :style="{ filter: $route.path === '/home' ? 'brightness(0) invert(1)' : 'None' }"/>
+          <img loading="lazy" alt="" src="@/assets/header/robot.png"
+            :style="{ filter: $route.path === '/home' ? 'brightness(0) invert(1)' : 'None' }" />
           智能体管理
         </div>
-        <div class="equipment-management" :class="{ 'active-tab': $route.path === '/user-management' }" @click="goUserManagement">
-          <img alt="" src="@/assets/header/user_management.png" :style="{ filter: $route.path === '/user-management' ? 'brightness(0) invert(1)' : 'None' }"/>
-          用户管理
-        </div>
-        <div class="equipment-management" :class="{ 'active-tab': $route.path === '/model-config' }" @click="goModelConfig">
-          <img alt="" src="@/assets/header/model_config.png" :style="{ filter: $route.path === '/model-config' ? 'brightness(0) invert(1)' : 'None' }"/>
+        <div v-if="isSuperAdmin" class="equipment-management" :class="{ 'active-tab': $route.path === '/model-config' }"
+          @click="goModelConfig">
+          <img loading="lazy" alt="" src="@/assets/header/model_config.png"
+            :style="{ filter: $route.path === '/model-config' ? 'brightness(0) invert(1)' : 'None' }" />
           模型配置
+        </div>
+        <div v-if="isSuperAdmin" class="equipment-management"
+          :class="{ 'active-tab': $route.path === '/user-management' }" @click="goUserManagement">
+          <img loading="lazy" alt="" src="@/assets/header/user_management.png"
+            :style="{ filter: $route.path === '/user-management' ? 'brightness(0) invert(1)' : 'None' }" />
+          用户管理
         </div>
       </div>
 
       <!-- 右侧元素 -->
       <div class="header-right">
         <div class="search-container">
-          <el-input
-            v-model="serach"
-            placeholder="输入名称搜索.."
-            class="custom-search-input"
-            @keyup.enter.native="handleSearch"
-          >
+          <el-input v-model="search" placeholder="输入名称搜索.." class="custom-search-input"
+            @keyup.enter.native="handleSearch">
             <i slot="suffix" class="el-icon-search search-icon" @click="handleSearch"></i>
           </el-input>
         </div>
-        <img alt="" src="@/assets/home/avatar.png" class="avatar-img"/>
+        <img loading="lazy" alt="" src="@/assets/home/avatar.png" class="avatar-img" />
         <el-dropdown trigger="click" class="user-dropdown">
           <span class="el-dropdown-link">
-             {{ userInfo.mobile || '加载中...' }}<i class="el-icon-arrow-down el-icon--right"></i>
+            {{ userInfo.username || '加载中...' }}<i class="el-icon-arrow-down el-icon--right"></i>
           </span>
           <el-dropdown-menu slot="dropdown">
-            <el-dropdown-item icon="el-icon-plus" @click.native="">个人中心</el-dropdown-item>
-            <el-dropdown-item icon="el-icon-circle-plus" @click.native="showChangePasswordDialog">修改密码</el-dropdown-item>
-            <el-dropdown-item icon="el-icon-circle-plus-outline" @click.native="">退出登录</el-dropdown-item>
+            <el-dropdown-item @click.native="showChangePasswordDialog">修改密码</el-dropdown-item>
+            <el-dropdown-item @click.native="handleLogout">退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </el-dropdown>
       </div>
     </div>
 
     <!-- 修改密码弹窗 -->
-    <ChangePasswordDialog :visible.sync="isChangePasswordDialogVisible"/>
+    <ChangePasswordDialog v-model="isChangePasswordDialogVisible" />
   </el-header>
 </template>
 
 <script>
 import userApi from '@/apis/module/user';
+import { mapActions, mapGetters } from 'vuex';
 import ChangePasswordDialog from './ChangePasswordDialog.vue'; // 引入修改密码弹窗组件
+
 
 export default {
   name: 'HeaderBar',
@@ -66,12 +68,18 @@ export default {
   props: ['devices'],  // 接收父组件设备列表
   data() {
     return {
-      serach: '',
+      search: '',
       userInfo: {
         username: '',
         mobile: ''
       },
       isChangePasswordDialogVisible: false // 控制修改密码弹窗的显示
+    }
+  },
+  computed: {
+    ...mapGetters(['getIsSuperAdmin']),
+    isSuperAdmin() {
+      return this.getIsSuperAdmin;
     }
   },
   mounted() {
@@ -80,7 +88,7 @@ export default {
   methods: {
     goHome() {
       // 跳转到首页
-      this.$router.push('/')
+      this.$router.push('/home')
     },
     goUserManagement() {
       this.$router.push('/user-management')
@@ -90,35 +98,61 @@ export default {
     },
     // 获取用户信息
     fetchUserInfo() {
-      userApi.getUserInfo(({data}) => {
+      userApi.getUserInfo(({ data }) => {
         this.userInfo = data.data
+        if (data.data.superAdmin !== undefined) {
+          this.$store.commit('setUserInfo', data.data);
+        }
       })
     },
 
     // 处理搜索
     handleSearch() {
-      const searchValue = this.serach.trim();
-      let filteredDevices;
+      const searchValue = this.search.trim();
 
+      // 如果搜索内容为空，触发重置事件
       if (!searchValue) {
-        // 当搜索内容为空时，显示原始完整列表
-        filteredDevices = this.$parent.originalDevices;
-      } else {
-        // 过滤逻辑
-        filteredDevices = this.devices.filter(device => {
-          return device.agentName.includes(searchValue) ||
-              device.ttsModelName.includes(searchValue) ||
-              device.ttsVoiceName.includes(searchValue);
-        });
+        this.$emit('search-reset');
+        return;
       }
 
-      this.$emit('search-result', filteredDevices);
+      try {
+        // 创建不区分大小写的正则表达式
+        const regex = new RegExp(searchValue, 'i');
+        // 触发搜索事件，将正则表达式传递给父组件
+        this.$emit('search', regex);
+      } catch (error) {
+        console.error('正则表达式创建失败:', error);
+        this.$message.error({
+          message: '搜索关键词格式不正确',
+          showClose: true
+        });
+      }
     },
-
     // 显示修改密码弹窗
     showChangePasswordDialog() {
       this.isChangePasswordDialogVisible = true;
-    }
+    },
+    // 退出登录
+    async handleLogout() {
+      try {
+        // 调用 Vuex 的 logout action
+        await this.logout();
+        this.$message.success({
+          message: '退出登录成功',
+          showClose: true
+        });
+      } catch (error) {
+        console.error('退出登录失败:', error);
+        this.$message.error({
+          message: '退出登录失败，请重试',
+          showClose: true
+        });
+      }
+    },
+
+    // 使用 mapActions 引入 Vuex 的 logout action
+    ...mapActions(['logout'])
   }
 }
 </script>
@@ -128,7 +162,8 @@ export default {
   background: #f6fcfe66;
   border: 1px solid #fff;
   height: 53px !important;
-  min-width: 900px; /* 设置最小宽度防止过度压缩 */
+  min-width: 900px;
+  /* 设置最小宽度防止过度压缩 */
   overflow: hidden;
 }
 
@@ -153,8 +188,7 @@ export default {
 }
 
 .brand-img {
-  width: 58px;
-  height: 12px;
+  height: 18px;
 }
 
 .header-center {
@@ -175,6 +209,7 @@ export default {
 }
 
 .equipment-management {
+  padding: 0 9px;
   width: 82px;
   height: 24px;
   border-radius: 12px;
@@ -189,7 +224,8 @@ export default {
   align-items: center;
   transition: all 0.3s ease;
   cursor: pointer;
-  flex-shrink: 0; /* 防止导航按钮被压缩 */
+  flex-shrink: 0;
+  /* 防止导航按钮被压缩 */
 }
 
 .equipment-management.active-tab {
@@ -209,10 +245,10 @@ export default {
   max-width: 220px;
 }
 
-.custom-search-input >>> .el-input__inner {
+.custom-search-input>>>.el-input__inner {
   height: 30px;
   border-radius: 15px;
-  background-color: #e2e5f8;
+  background-color: #fff;
   border: 1px solid #e4e6ef;
   padding-left: 15px;
   font-size: 12px;
@@ -276,7 +312,7 @@ export default {
     max-width: 145px;
   }
 
-  .custom-search-input >>> .el-input__inner {
+  .custom-search-input>>>.el-input__inner {
     padding-left: 10px;
     font-size: 11px;
   }
